@@ -10,9 +10,6 @@ from tensorflow.keras import activations
 import matplotlib.pyplot as plt
 
 
-# TODO: Define the model using keras, Arguments: Learning rate;
-#  Hidden layers have sigmoid activation function,
-#  Output neuron has softmax activation with 10 output units
 class MLP(Model):
 
     def __init__(self):
@@ -27,10 +24,6 @@ class MLP(Model):
         x = self.out(x)
         return x
 
-
-# TODO: Training: epochs: 10, loss: categorical cross entropy, optimizer: SGD
-#  Record loss and accuracy
-# TOASK: What exactly is an epoch?
 
 # TODO: Visualize accuracy and loss for
 #  training AND test data using matplotlib
@@ -101,18 +94,23 @@ plt.show()
 """
 
 
-def data_pipeline(data):
+def data_pipeline(data, train, batch_size=128):
     # take only 1/10 of original data
     data = data.shard(10, 0)
-    return data.map(onehotify)
+    data = data.map(onehotify)
+    # only apply following processes on training data
+    # TOASK: Maybe, one needs to also do batch and shuffling to test data. Compare with Tensorflow_intro
+    if train:
+        data = data.batch(batch_size)
+    return data
 
 if __name__ == "__main__":
     # TODO: Change train_input into normal tf.data.Dataset object
     # use https://www.tensorflow.org/datasets/api_docs/python/tfds/load. Just use string for loading
     # TODO: Interestingly, setting the batch size to 128 destroys the whole thing.
     genomics_data = tfds.load('genomics_ood', split=['train', 'test'], as_supervised=True)
-    train_data = data_pipeline(genomics_data[0])
-    test_data = data_pipeline(genomics_data[1])
+    train_data = data_pipeline(genomics_data[0], True)
+    test_data = data_pipeline(genomics_data[1], False)
     # TODO: figure out if data is already prefetched or not
     # TODO: figure out if batch size is 128 or not
 
@@ -125,7 +123,7 @@ if __name__ == "__main__":
     # TODO: Prefetching
 
     # TODO: Make sure that I have 100k training
-    mlp = MLP()
+    model = MLP()
     num_epochs = 10
     learning_rate = 0.1
     loss = tf.keras.losses.CategoricalCrossentropy()
@@ -133,9 +131,40 @@ if __name__ == "__main__":
 
     # Initialize lists for later visualization.
     train_losses = []
+    # TODO: Also track train accuracy
     train_accuracies = []
     test_losses = []
     test_accuracies = []
 
     for epoch in range(num_epochs):
-        print('Epoch: __ ' + str(epoch))
+        print('Epoch: ' + str(epoch))
+
+        # TOASK: Maybe, one needs to also shuffling to test data. Compare with Tensorflow_intro
+        train_data = train_data.shuffle(buffer_size=128)
+
+        for (input, target) in train_data:
+            train_loss = train_loss = train_step(model, input, target, loss, optimizer)
+            # TODO: Maybe replace with running average like in Tensorflow_intro
+            train_losses.append(train_loss)
+
+        # testing
+        test_loss, test_accuracy = test(model, test_data, loss)
+        test_losses.append(test_loss)
+        test_accuracies.append(test_accuracy)
+
+    # Visualize accuracy and loss for training and test data.
+    # One plot training and test loss.
+    # One plot training and test accuracy.
+    plt.figure()
+    line1, = plt.plot(train_losses)
+    line2, = plt.plot(test_losses)
+    plt.xlabel("Training steps")
+    plt.ylabel("Loss")
+    plt.legend((line1, line2), ("training", "test"))
+    plt.show()
+
+    plt.figure()
+    line1, = plt.plot(test_accuracies)
+    plt.xlabel("Training steps")
+    plt.ylabel("Accuracy")
+    plt.show()
