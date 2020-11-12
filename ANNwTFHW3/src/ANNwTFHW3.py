@@ -151,5 +151,6 @@ if __name__ == "__main__":
         test_losses.append(test_loss)
         test_accuracies.append(test_accuracy)
 
+    # TODO: maybe plot train and test stats differently since they have different training sizes
     plot_stats(train_losses, test_losses, "Loss")
     plot_stats(train_accuracies, test_accuracies, "Accuracy")
