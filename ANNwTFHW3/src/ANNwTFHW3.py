@@ -1,5 +1,5 @@
 # TODO: reorder functions and class etc.
-# TODO: Optimize with e.g. decorators
+# TODO: Optimize with e.g. decorators. Check performance by running only for short epoch
 import numpy as np
 # TODO: uncomment for Jupyter
 # %tensorflow_version 2.x
