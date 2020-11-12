@@ -1,4 +1,5 @@
 # TODO: reorder functions and class etc.
+# TODO: Optimize with e.g. decorators
 import numpy as np
 # TODO: uncomment for Jupyter
 # %tensorflow_version 2.x
@@ -18,6 +19,7 @@ class MLP(Model):
         self.hidden_layer2 = Dense(256, activation=activations.sigmoid)
         self.out = Dense(10, activation=activations.softmax)
 
+    @tf.function
     def call(self, x):
         x = self.hidden_layer1(x)
         x = self.hidden_layer2(x)
@@ -35,19 +37,28 @@ def onehotify(tensor, label):
         split = tf.strings.bytes_split(tensor)
         labels = tf.cast(tf.strings.to_number(split), tf.uint8)
         onehot = tf.one_hot(labels, 4)
+        # TODO: Why should we transform one hot vector back to such a weird form?
         onehot = tf.reshape(onehot, (-1,))
     label = tf.one_hot(label, 10)
     return onehot, label
 
 
 def train_step(model, input, target, loss_function, optimizer):
+
+    accuracy = None
+
     # loss_object and optimizer_object are instances of respective tensorflow classes
     with tf.GradientTape() as tape:
         prediction = model(input)
+        # TODO: Confirm accuracy is of size batch
+        accuracy = np.argmax(target, axis=1) == np.argmax(prediction, axis=1)
         loss = loss_function(target, prediction)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    return loss
+
+    accuracy = np.mean(accuracy)
+
+    return loss, accuracy
 
 
 def test(model, test_data, loss_function):
@@ -59,72 +70,58 @@ def test(model, test_data, loss_function):
     for (input, target) in test_data:
         prediction = model(input)
         sample_test_loss = loss_function(target, prediction)
-        # TODO: change accuracy
+        # TODO: it seems that accuracy is fine this way, but not 100% sure. Is the whole batch.
         sample_test_accuracy = np.argmax(target, axis=1) == np.argmax(prediction, axis=1)
         sample_test_accuracy = np.mean(sample_test_accuracy)
         test_loss_aggregator.append(sample_test_loss.numpy())
-        # TODO: is the np.mean here even necessary?
-        test_accuracy_aggregator.append(np.mean(sample_test_accuracy))
+        # FIXME: removed a np.mean around sample_test_accuracy. Should be fine
+        test_accuracy_aggregator.append(sample_test_accuracy)
 
-    # TODO: is the np.mean here even necessary?
+    # TODO: Note to myself: np.mean should stay here
     test_loss = np.mean(test_loss_aggregator)
-    # TODO: is the np.mean here even necessary?
     test_accuracy = np.mean(test_accuracy_aggregator)
 
     return test_loss, test_accuracy
 
-
-"""
-# Visualize accuracy and loss for training and test data. 
-# One plot training and test loss.
-# One plot training and test accuracy.
-plt.figure()
-line1, = plt.plot(train_losses)
-line2, = plt.plot(test_losses)
-plt.xlabel("Training steps")
-plt.ylabel("Loss")
-plt.legend((line1,line2),("training","test"))
-plt.show()
-
-plt.figure()
-line1, = plt.plot(test_accuracies)
-plt.xlabel("Training steps")
-plt.ylabel("Accuracy")
-plt.show()
-"""
+# TODO
+def plot_stats(train_stat, test_stat, stat_name):
+    plt.figure()
+    line1, = plt.plot(train_stat)
+    line2, = plt.plot(test_stat)
+    plt.xlabel("Training steps")
+    plt.ylabel(stat_name)
+    plt.legend((line1, line2), ("training", "test"))
+    plt.show()
 
 
-def data_pipeline(data, train, batch_size=128):
+def data_pipeline(data, batch_size=100):
     # take only 1/10 of original data
-    data = data.shard(10, 0)
+    # TODO: change shard to 10 again. 1000 only for faster debugging / testing.
+    data = data.shard(10000, 0)
     data = data.map(onehotify)
-    # only apply following processes on training data
-    # TOASK: Maybe, one needs to also do batch and shuffling to test data. Compare with Tensorflow_intro
-    if train:
-        data = data.batch(batch_size)
+    data = data.batch(batch_size)
+    # unsure if shuffle is needed here, but they did it in Tensorflow_Intro.ipynb so...
+    # buffer_size and batch_size don't have to be the same btw., but we pick the same in this case
+    # TODO: Prefetching
+    data = data.shuffle(buffer_size=batch_size)
     return data
 
 if __name__ == "__main__":
-    # TODO: Change train_input into normal tf.data.Dataset object
-    # use https://www.tensorflow.org/datasets/api_docs/python/tfds/load. Just use string for loading
-    # TODO: Interestingly, setting the batch size to 128 destroys the whole thing.
+    BATCH_SIZE = 100
+    # as_supervised results in only returning domain and labels and leaving out other unnecessary info
     genomics_data = tfds.load('genomics_ood', split=['train', 'test'], as_supervised=True)
-    train_data = data_pipeline(genomics_data[0], True)
-    test_data = data_pipeline(genomics_data[1], False)
+    # each entry is a batch of size BATCH_SIZE
+    train_data = data_pipeline(genomics_data[0], BATCH_SIZE)
+    test_data = data_pipeline(genomics_data[1], BATCH_SIZE)
     # TODO: figure out if data is already prefetched or not
-    # TODO: figure out if batch size is 128 or not
 
-    # TODO: investigate data set
-
-    # TODO: data pipeline:
     # TODO: only take 100k for training and 1k for testing
-    # TODO: Transform into one-hot encoding
-    # TODO: Batching
-    # TODO: Prefetching
 
-    # TODO: Make sure that I have 100k training
+    tf.keras.backend.clear_session()
+
     model = MLP()
-    num_epochs = 10
+    # TODO: change num_epochs back to 10 for actual implementation
+    num_epochs = 2
     learning_rate = 0.1
     loss = tf.keras.losses.CategoricalCrossentropy()
     optimizer = tf.keras.optimizers.SGD(learning_rate)
@@ -139,32 +136,20 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         print('Epoch: ' + str(epoch))
 
-        # TOASK: Maybe, one needs to also shuffling to test data. Compare with Tensorflow_intro
-        train_data = train_data.shuffle(buffer_size=128)
+        # shuffle train data. No need to shuffle test data
+        train_data = train_data.shuffle(buffer_size=BATCH_SIZE)
 
         for (input, target) in train_data:
-            train_loss = train_loss = train_step(model, input, target, loss, optimizer)
+            train_loss, train_accuracy = train_step(model, input, target, loss, optimizer)
             # TODO: Maybe replace with running average like in Tensorflow_intro
             train_losses.append(train_loss)
+            train_accuracies.append(train_accuracy)
+            # TODO: train_accuracies
 
         # testing
         test_loss, test_accuracy = test(model, test_data, loss)
         test_losses.append(test_loss)
         test_accuracies.append(test_accuracy)
 
-    # Visualize accuracy and loss for training and test data.
-    # One plot training and test loss.
-    # One plot training and test accuracy.
-    plt.figure()
-    line1, = plt.plot(train_losses)
-    line2, = plt.plot(test_losses)
-    plt.xlabel("Training steps")
-    plt.ylabel("Loss")
-    plt.legend((line1, line2), ("training", "test"))
-    plt.show()
-
-    plt.figure()
-    line1, = plt.plot(test_accuracies)
-    plt.xlabel("Training steps")
-    plt.ylabel("Accuracy")
-    plt.show()
+    plot_stats(train_losses, test_losses, "Loss")
+    plot_stats(train_accuracies, test_accuracies, "Accuracy")
