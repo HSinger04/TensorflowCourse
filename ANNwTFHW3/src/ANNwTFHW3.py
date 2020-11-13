@@ -87,16 +87,20 @@ if __name__ == "__main__":
     PREFETCH_SIZE = 5
     BATCH_SIZE = 100
 
-    # define data_pipeline as a local function to access PREFETCH_SIZE
-    def data_pipeline(data, batch_size=100):
+    def data_pipeline(data):
+        """ helper function for data pipeline - does all the things we need
+
+        :param data:
+        :return:
+        """
         # take only 1/10 of original data
         # TODO: change shard to 10 again. 1000 only for faster debugging / testing.
         data = data.shard(10000, 0)
         data = data.map(onehotify)
-        data = data.batch(batch_size)
+        data = data.batch(BATCH_SIZE)
         # unsure if shuffle is needed here, but they did it in Tensorflow_Intro.ipynb so...
         # buffer_size and batch_size don't have to be the same btw., but we pick the same in this case
-        data = data.shuffle(buffer_size=batch_size)
+        data = data.shuffle(buffer_size=BATCH_SIZE)
         data = data.prefetch(PREFETCH_SIZE)
         return data
 
@@ -104,8 +108,8 @@ if __name__ == "__main__":
     # as_supervised results in only returning domain and labels and leaving out other unnecessary info
     genomics_data = tfds.load('genomics_ood', split=['train', 'test'], as_supervised=True)
     # each entry is a batch of size BATCH_SIZE
-    train_data = data_pipeline(genomics_data[0], BATCH_SIZE)
-    test_data = data_pipeline(genomics_data[1], BATCH_SIZE)
+    train_data = data_pipeline(genomics_data[0])
+    test_data = data_pipeline(genomics_data[1])
 
     tf.keras.backend.clear_session()
 
