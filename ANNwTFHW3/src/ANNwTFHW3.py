@@ -73,11 +73,13 @@ def test(model, test_data, loss_function):
     return test_loss, test_accuracy
 
 
-def plot_stats(stat_list, stat_name):
+def plot_stats(train_stat, test_stat, stat_name):
     plt.figure()
-    line, = plt.plot(stat_list)
+    line1, = plt.plot(train_stat)
+    line2, = plt.plot(test_stat)
     plt.xlabel("Training steps")
     plt.ylabel(stat_name)
+    plt.legend((line1, line2), ("training", "test"))
     plt.show()
 
 
@@ -87,15 +89,15 @@ if __name__ == "__main__":
     PREFETCH_SIZE = 5
     BATCH_SIZE = 100
 
-    def data_pipeline(data):
+    def data_pipeline(data, denominator):
         """ helper function for data pipeline - does all the things we need
 
         :param data:
         :return:
         """
-        # take only 1/10 of original data
+        # take only 1/denominator of original data
         # TODO: change shard to 10 again. 1000 only for faster debugging / testing.
-        data = data.shard(10000, 0)
+        data = data.shard(denominator, 0)
         data = data.map(onehotify)
         data = data.batch(BATCH_SIZE)
         # unsure if shuffle is needed here, but they did it in Tensorflow_Intro.ipynb so...
@@ -108,8 +110,8 @@ if __name__ == "__main__":
     # as_supervised results in only returning domain and labels and leaving out other unnecessary info
     genomics_data = tfds.load('genomics_ood', split=['train', 'test'], as_supervised=True)
     # each entry is a batch of size BATCH_SIZE
-    train_data = data_pipeline(genomics_data[0])
-    test_data = data_pipeline(genomics_data[1])
+    train_data = data_pipeline(genomics_data[0], 10)
+    test_data = data_pipeline(genomics_data[1], 100)
 
     tf.keras.backend.clear_session()
 
@@ -153,16 +155,13 @@ if __name__ == "__main__":
             train_loss, train_accuracy = train_step(model, input, target, loss, optimizer)
             train_loss_stat = calc_stat(train_loss_stat, train_loss)
             train_accuracy_stat = calc_stat(train_accuracy_stat, train_accuracy)
-            train_losses.append(train_loss_stat)
-            train_accuracies.append(train_accuracy_stat)
+        train_losses.append(train_loss_stat)
+        train_accuracies.append(train_accuracy_stat)
 
         # testing
         test_loss, test_accuracy = test(model, test_data, loss)
         test_losses.append(test_loss)
         test_accuracies.append(test_accuracy)
 
-    # plot train and test stats differently since they have different training sizes
-    plot_stats(train_losses, "Training Loss")
-    plot_stats(test_losses, "Testing Loss")
-    plot_stats(train_accuracies, "Training Accuracy")
-    plot_stats(test_accuracies, "Testing Accuracy")
+    plot_stats(train_losses, test_losses, "Loss")
+    plot_stats(train_accuracies, test_accuracies, "Accuracy")
