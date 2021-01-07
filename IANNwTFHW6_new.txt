@@ -1,0 +1,6 @@
+# For the Dense-Net and model comparison, see:
+https://colab.research.google.com/github/sascha-senko/TensorflowCourse/blob/main/Cifar10dense.ipynb
+# For the Res-Net, see:
+https://colab.research.google.com/github/sascha-senko/TensorflowCourse/blob/main/Cifar10_res_dense.ipynb
+# For our previous normal CNN model, see:
+https://colab.research.google.com/github/sascha-senko/TensorflowCourse/blob/main/ANNwTFHW5/ANNwTFHW5.ipynb
